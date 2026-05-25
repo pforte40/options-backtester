@@ -1,0 +1,641 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Options Backtester</title>
+<link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --bg:        #0d0f12;
+    --surface:   #151820;
+    --surface2:  #1c2030;
+    --border:    #262d3d;
+    --border2:   #323b52;
+    --text:      #e8eaf0;
+    --muted:     #7a8299;
+    --accent:    #4f8ef7;
+    --accent2:   #7eb3ff;
+    --green:     #3ecf8e;
+    --red:       #f26b6b;
+    --amber:     #f5a623;
+    --mono:      'DM Mono', monospace;
+    --sans:      'DM Sans', sans-serif;
+  }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: var(--sans);
+    font-size: 15px;
+    min-height: 100vh;
+    line-height: 1.6;
+  }
+
+  /* ── Layout ── */
+  .app { display: grid; grid-template-columns: 340px 1fr; min-height: 100vh; }
+
+  /* ── Sidebar ── */
+  .sidebar {
+    background: var(--surface);
+    border-right: 1px solid var(--border);
+    padding: 2rem 1.75rem;
+    display: flex;
+    flex-direction: column;
+    gap: 2rem;
+    position: sticky;
+    top: 0;
+    height: 100vh;
+    overflow-y: auto;
+  }
+
+  .logo {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+  .logo-mark {
+    width: 36px; height: 36px;
+    background: var(--accent);
+    border-radius: 8px;
+    display: flex; align-items: center; justify-content: center;
+    font-family: var(--mono);
+    font-size: 14px;
+    font-weight: 500;
+    color: #fff;
+    letter-spacing: -1px;
+  }
+  .logo-text {
+    font-size: 15px;
+    font-weight: 600;
+    color: var(--text);
+    letter-spacing: 0.01em;
+  }
+  .logo-sub {
+    font-size: 11px;
+    color: var(--muted);
+    font-family: var(--mono);
+  }
+
+  .form-section { display: flex; flex-direction: column; gap: 1.25rem; }
+
+  .field { display: flex; flex-direction: column; gap: 6px; }
+  .field label {
+    font-size: 11px;
+    font-weight: 500;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--muted);
+    font-family: var(--mono);
+  }
+
+  input, select {
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    color: var(--text);
+    font-family: var(--mono);
+    font-size: 14px;
+    height: 44px;
+    padding: 0 14px;
+    width: 100%;
+    transition: border-color 0.15s;
+    appearance: none;
+  }
+  input:focus, select:focus {
+    outline: none;
+    border-color: var(--accent);
+    box-shadow: 0 0 0 3px rgba(79,142,247,0.12);
+  }
+  input::placeholder { color: var(--muted); }
+  input[type="date"]::-webkit-calendar-picker-indicator { filter: invert(0.5); cursor: pointer; }
+
+  /* segment toggle */
+  .seg-wrap { display: flex; gap: 6px; }
+  .seg-btn {
+    flex: 1; height: 44px;
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    color: var(--muted);
+    font-family: var(--mono);
+    font-size: 13px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.15s;
+    letter-spacing: 0.05em;
+  }
+  .seg-btn:hover { border-color: var(--border2); color: var(--text); }
+  .seg-btn.call.active { background: rgba(62,207,142,0.12); border-color: var(--green); color: var(--green); }
+  .seg-btn.put.active  { background: rgba(242,107,107,0.12); border-color: var(--red);   color: var(--red);   }
+
+  .run-btn {
+    width: 100%;
+    height: 48px;
+    background: var(--accent);
+    border: none;
+    border-radius: 10px;
+    color: #fff;
+    font-family: var(--sans);
+    font-size: 15px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: background 0.15s, transform 0.1s;
+    letter-spacing: 0.01em;
+    margin-top: 0.25rem;
+  }
+  .run-btn:hover   { background: #6ba3ff; }
+  .run-btn:active  { transform: scale(0.98); }
+  .run-btn:disabled { background: var(--border2); cursor: not-allowed; transform: none; }
+
+  .status-msg {
+    font-size: 12px;
+    font-family: var(--mono);
+    color: var(--muted);
+    min-height: 18px;
+    text-align: center;
+  }
+  .status-msg.error { color: var(--red); }
+
+  .sidebar-footer {
+    margin-top: auto;
+    font-size: 11px;
+    color: var(--muted);
+    font-family: var(--mono);
+    line-height: 1.7;
+    padding-top: 1rem;
+    border-top: 1px solid var(--border);
+  }
+
+  /* ── Main content ── */
+  .main {
+    padding: 2.5rem 2.5rem 3rem;
+    display: flex;
+    flex-direction: column;
+    gap: 2rem;
+  }
+
+  .empty-state {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 12px;
+    color: var(--muted);
+    min-height: 60vh;
+  }
+  .empty-icon {
+    font-size: 48px;
+    opacity: 0.3;
+  }
+  .empty-state h2 { font-size: 18px; font-weight: 500; color: var(--muted); }
+  .empty-state p  { font-size: 13px; font-family: var(--mono); }
+
+  /* ── Metric cards ── */
+  .metrics-grid {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 14px;
+  }
+  .metric-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 1.25rem 1.25rem 1rem;
+    position: relative;
+    overflow: hidden;
+  }
+  .metric-card::before {
+    content: '';
+    position: absolute;
+    top: 0; left: 0; right: 0;
+    height: 2px;
+    background: var(--accent-line, var(--border2));
+  }
+  .metric-card.green::before { background: var(--green); }
+  .metric-card.red::before   { background: var(--red); }
+  .metric-card.amber::before { background: var(--amber); }
+  .metric-card.blue::before  { background: var(--accent); }
+
+  .metric-label {
+    font-size: 10px;
+    font-family: var(--mono);
+    font-weight: 500;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--muted);
+    margin-bottom: 8px;
+  }
+  .metric-value {
+    font-size: 26px;
+    font-weight: 600;
+    font-family: var(--mono);
+    color: var(--text);
+    line-height: 1.1;
+  }
+  .metric-sub {
+    font-size: 11px;
+    color: var(--muted);
+    font-family: var(--mono);
+    margin-top: 4px;
+  }
+
+  /* ── Section header ── */
+  .section-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 1rem;
+  }
+  .section-title {
+    font-size: 13px;
+    font-weight: 500;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+    color: var(--muted);
+    font-family: var(--mono);
+  }
+
+  /* ── Legend ── */
+  .legend {
+    display: flex;
+    gap: 16px;
+    font-size: 11px;
+    font-family: var(--mono);
+    color: var(--muted);
+    align-items: center;
+  }
+  .legend-dot {
+    width: 8px; height: 8px;
+    border-radius: 2px;
+    display: inline-block;
+    margin-right: 5px;
+  }
+
+  /* ── Chart ── */
+  .chart-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 1.5rem;
+  }
+  .chart-wrap { position: relative; height: 260px; }
+
+  /* ── Table ── */
+  .table-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    overflow: hidden;
+  }
+  .table-header {
+    padding: 1rem 1.25rem;
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+  .export-btn {
+    background: transparent;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    color: var(--muted);
+    font-family: var(--mono);
+    font-size: 11px;
+    padding: 5px 12px;
+    cursor: pointer;
+    transition: all 0.15s;
+  }
+  .export-btn:hover { border-color: var(--border2); color: var(--text); }
+
+  .tbl-scroll { overflow-x: auto; max-height: 420px; overflow-y: auto; }
+  table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  thead tr { position: sticky; top: 0; background: var(--surface2); z-index: 1; }
+  th {
+    text-align: left;
+    padding: 10px 16px;
+    font-size: 10px;
+    font-family: var(--mono);
+    font-weight: 500;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--muted);
+    border-bottom: 1px solid var(--border);
+    white-space: nowrap;
+  }
+  td {
+    padding: 9px 16px;
+    font-family: var(--mono);
+    font-size: 12px;
+    border-bottom: 1px solid var(--border);
+    color: var(--text);
+    white-space: nowrap;
+  }
+  tbody tr:last-child td { border-bottom: none; }
+  tbody tr:hover { background: var(--surface2); }
+  tbody tr.breached td { color: var(--red); }
+
+  .badge {
+    display: inline-block;
+    font-size: 10px;
+    font-weight: 500;
+    font-family: var(--mono);
+    padding: 2px 8px;
+    border-radius: 4px;
+    letter-spacing: 0.05em;
+  }
+  .badge-breach { background: rgba(242,107,107,0.15); color: var(--red); border: 1px solid rgba(242,107,107,0.3); }
+  .badge-safe   { background: rgba(62,207,142,0.10);  color: var(--green); border: 1px solid rgba(62,207,142,0.25); }
+
+  /* ── Summary bar ── */
+  .summary-bar {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 1rem 1.5rem;
+    font-size: 13px;
+    font-family: var(--mono);
+    color: var(--muted);
+    line-height: 1.8;
+  }
+  .summary-bar strong { color: var(--text); font-weight: 500; }
+  .summary-bar .hi { color: var(--accent2); }
+
+  /* ── Animations ── */
+  @keyframes fadeUp {
+    from { opacity: 0; transform: translateY(12px); }
+    to   { opacity: 1; transform: translateY(0); }
+  }
+  .animate { animation: fadeUp 0.3s ease both; }
+  .animate:nth-child(2) { animation-delay: 0.05s; }
+  .animate:nth-child(3) { animation-delay: 0.10s; }
+  .animate:nth-child(4) { animation-delay: 0.15s; }
+
+  /* ── Scrollbar ── */
+  ::-webkit-scrollbar { width: 6px; height: 6px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb { background: var(--border2); border-radius: 3px; }
+</style>
+</head>
+<body>
+<div class="app">
+
+  <!-- Sidebar -->
+  <aside class="sidebar">
+    <div class="logo">
+      <div class="logo-mark">OB</div>
+      <div>
+        <div class="logo-text">Options Backtester</div>
+        <div class="logo-sub">180-day rolling analysis</div>
+      </div>
+    </div>
+
+    <div class="form-section">
+
+      <div class="field">
+        <label for="ticker">Ticker symbol</label>
+        <input id="ticker" type="text" placeholder="AAPL" maxlength="6" autocomplete="off" spellcheck="false">
+      </div>
+
+      <div class="field">
+        <label>Option type</label>
+        <div class="seg-wrap">
+          <button class="seg-btn call active" id="btn-call">CALL</button>
+          <button class="seg-btn put"         id="btn-put">PUT</button>
+        </div>
+        <input type="hidden" id="option-type" value="CALL">
+      </div>
+
+      <div class="field">
+        <label for="strike">Strike price ($)</label>
+        <input id="strike" type="number" placeholder="210.00" step="0.50" min="0.01">
+      </div>
+
+      <div class="field">
+        <label for="expiry">Expiration date</label>
+        <input id="expiry" type="date">
+      </div>
+
+      <button class="run-btn" id="run-btn">Run Backtest</button>
+      <div class="status-msg" id="status"></div>
+
+    </div>
+
+    <div class="sidebar-footer">
+      Data: Yahoo Finance<br>
+      Method: rolling periods (open→close)<br>
+      Lookback: last 180 trading periods<br>
+      Period length: DTE trading days
+    </div>
+  </aside>
+
+  <!-- Main -->
+  <main class="main" id="main">
+    <div class="empty-state" id="empty">
+      <div class="empty-icon">◎</div>
+      <h2>No backtest run yet</h2>
+      <p>Fill in the form and hit Run Backtest</p>
+    </div>
+  </main>
+
+</div>
+
+<script>
+// ── Option type toggle ───────────────────────────────────────────
+var optTypeInput = document.getElementById('option-type');
+document.getElementById('btn-call').addEventListener('click', function() {
+  optTypeInput.value = 'CALL';
+  document.getElementById('btn-call').className = 'seg-btn call active';
+  document.getElementById('btn-put').className  = 'seg-btn put';
+});
+document.getElementById('btn-put').addEventListener('click', function() {
+  optTypeInput.value = 'PUT';
+  document.getElementById('btn-call').className = 'seg-btn call';
+  document.getElementById('btn-put').className  = 'seg-btn put active';
+});
+
+// ── Set min date ─────────────────────────────────────────────────
+var tomorrow = new Date();
+tomorrow.setDate(tomorrow.getDate() + 1);
+document.getElementById('expiry').min = tomorrow.toISOString().split('T')[0];
+
+// ── Run button ───────────────────────────────────────────────────
+var chartInst = null;
+
+document.getElementById('run-btn').addEventListener('click', function() {
+  var ticker = document.getElementById('ticker').value.trim().toUpperCase();
+  var ot     = document.getElementById('option-type').value;
+  var strike = parseFloat(document.getElementById('strike').value);
+  var expiry = document.getElementById('expiry').value;
+
+  if (!ticker)              return setStatus('Enter a ticker symbol.', true);
+  if (!strike || strike<=0) return setStatus('Enter a valid strike price.', true);
+  if (!expiry)              return setStatus('Select an expiration date.', true);
+
+  setStatus('Fetching ' + ticker + ' from Yahoo Finance…', false);
+  document.getElementById('run-btn').disabled = true;
+
+  var url = 'http://localhost:5050/api/backtest?ticker=' + encodeURIComponent(ticker) +
+    '&type=' + ot + '&strike=' + strike + '&expiry=' + expiry;
+
+  fetch(url)
+    .then(function(r) { return r.json(); })
+    .then(function(d) {
+      document.getElementById('run-btn').disabled = false;
+      if (!d.ok) return setStatus(d.error, true);
+      setStatus('');
+      renderResults(d);
+    })
+    .catch(function(e) {
+      document.getElementById('run-btn').disabled = false;
+      setStatus('Cannot connect to server. Is server.py running?', true);
+    });
+});
+
+function setStatus(msg, isErr) {
+  var el = document.getElementById('status');
+  el.textContent = msg;
+  el.className = 'status-msg' + (isErr ? ' error' : '');
+}
+
+// ── Render results ───────────────────────────────────────────────
+function renderResults(d) {
+  var main = document.getElementById('main');
+  var bufSign = d.buffer_pct >= 0 ? '+' : '';
+  var otm = d.buffer_pct >= 0 ? 'OTM' : 'ITM';
+  var breachColor = d.breach_rate > 33 ? 'red' : d.breach_rate > 15 ? 'amber' : 'green';
+
+  // summary sentence
+  var direction = d.option_type === 'CALL'
+    ? 'moved up ≥ <strong>' + bufSign + d.buffer_pct.toFixed(2) + '%</strong>'
+    : 'moved down ≥ <strong>' + Math.abs(d.buffer_pct).toFixed(2) + '%</strong>';
+
+  var html = '';
+
+  // Summary bar
+  html += '<div class="summary-bar animate">' +
+    'A <strong>' + d.option_type + '</strong> on <span class="hi">' + d.ticker + '</span>' +
+    ' with a <strong>$' + d.strike.toFixed(2) + '</strong> strike expires in <strong>' + d.dte + ' days</strong>. ' +
+    'The buffer is <strong>' + bufSign + d.buffer_pct.toFixed(2) + '%</strong> (' + otm + '). ' +
+    'Over the last 180 rolling periods, the stock ' + direction + ' in ' +
+    '<strong>' + d.breach_rate + '%</strong> of cases (' + d.breaches + '/' + d.total + ').' +
+  '</div>';
+
+  // Metrics
+  html += '<div class="metrics-grid">';
+  html += metCard('Current price', '$' + d.current_price.toFixed(2), d.ticker + ' · ' + d.option_type, 'blue');
+  html += metCard('Buffer', bufSign + d.buffer_pct.toFixed(2) + '%', 'Strike $' + d.strike.toFixed(2) + ' · ' + otm, d.buffer_pct >= 0 ? 'green' : 'red');
+  html += metCard('DTE', d.dte, 'days to ' + d.expiry, 'amber');
+  html += metCard('Breach rate', d.breach_rate + '%', d.breaches + ' breaches / ' + d.total + ' periods', breachColor);
+  html += '</div>';
+
+  // Chart
+  html += '<div class="chart-card animate">' +
+    '<div class="section-header">' +
+      '<span class="section-title">Period moves vs. buffer</span>' +
+      '<div class="legend">' +
+        '<span><span class="legend-dot" style="background:#f26b6b"></span>Breached</span>' +
+        '<span><span class="legend-dot" style="background:#4f8ef7"></span>Safe</span>' +
+        '<span><span class="legend-dot" style="background:#7a8299;border-radius:0;height:2px;width:16px"></span>Buffer line</span>' +
+      '</div>' +
+    '</div>' +
+    '<div class="chart-wrap"><canvas id="ch" role="img" aria-label="Bar chart of period moves"></canvas></div>' +
+  '</div>';
+
+  // Table — move column label depends on option type
+  var moveLbl = d.option_type === 'CALL' ? 'Up Move' : 'Down Move';
+  html += '<div class="table-card animate">' +
+    '<div class="table-header">' +
+      '<span class="section-title">Period detail</span>' +
+      '<button class="export-btn" id="export-btn">Export CSV</button>' +
+    '</div>' +
+    '<div class="tbl-scroll"><table>' +
+      '<thead><tr><th>#</th><th>Start</th><th>End</th><th>Open</th><th>Close</th><th>Stock Move</th><th>' + moveLbl + '</th><th>Result</th></tr></thead>' +
+      '<tbody id="tbl-body"></tbody>' +
+    '</table></div>' +
+  '</div>';
+
+  main.innerHTML = html;
+
+  // Populate table
+  var tbody = document.getElementById('tbl-body');
+  var rows = d.periods.slice().reverse();
+  tbody.innerHTML = rows.map(function(p) {
+    var br = p.breached;
+    // Raw stock move: always (close - open) / open — familiar to read
+    var rawMove = ((p.close - p.open) / p.open) * 100;
+    var rawStr = (rawMove >= 0 ? '+' : '') + rawMove.toFixed(2) + '%';
+    // Directional move toward breach: positive = moving against option seller
+    var dirMove = (p.move >= 0 ? '+' : '') + Math.abs(p.move).toFixed(2) + '%';
+    var badge = br
+      ? '<span class="badge badge-breach">BREACHED</span>'
+      : '<span class="badge badge-safe">safe</span>';
+    return '<tr class="' + (br ? 'breached' : '') + '">' +
+      '<td>' + p.idx + '</td>' +
+      '<td>' + p.start_date + '</td>' +
+      '<td>' + p.end_date + '</td>' +
+      '<td>$' + p.open.toFixed(2) + '</td>' +
+      '<td>$' + p.close.toFixed(2) + '</td>' +
+      '<td>' + rawStr + '</td>' +
+      '<td>' + dirMove + '</td>' +
+      '<td>' + badge + '</td>' +
+    '</tr>';
+  }).join('');
+
+  // Chart
+  if (chartInst) { chartInst.destroy(); chartInst = null; }
+  var labels = d.periods.map(function(p) { return p.start_date.slice(5); });
+  var moves  = d.periods.map(function(p) { return parseFloat(p.move.toFixed(2)); });
+  var colors = moves.map(function(m) { return m >= d.buffer_pct ? '#f26b6b' : '#4f8ef7'; });
+  var bufLine = Array(labels.length).fill(parseFloat(d.buffer_pct.toFixed(2)));
+
+  chartInst = new Chart(document.getElementById('ch'), {
+    type: 'bar',
+    data: {
+      labels: labels,
+      datasets: [
+        { label: 'Move (%)', data: moves, backgroundColor: colors, borderWidth: 0, barPercentage: 0.8 },
+        { label: 'Buffer', data: bufLine, type: 'line', borderColor: '#7a8299', borderDash: [5,3], borderWidth: 1.5, pointRadius: 0, fill: false }
+      ]
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: {
+        legend: { display: false },
+        tooltip: { callbacks: { label: function(c) { return c.dataset.label + ': ' + c.parsed.y.toFixed(2) + '%'; } } }
+      },
+      scales: {
+        x: { ticks: { maxTicksLimit: 12, font: { family: 'DM Mono', size: 10 }, color: '#7a8299' }, grid: { display: false }, border: { color: '#262d3d' } },
+        y: { ticks: { callback: function(v) { return v + '%'; }, font: { family: 'DM Mono', size: 10 }, color: '#7a8299' }, grid: { color: 'rgba(255,255,255,0.04)' }, border: { color: '#262d3d' } }
+      }
+    }
+  });
+
+  // Export CSV
+  document.getElementById('export-btn').addEventListener('click', function() {
+    var csv = 'Period,Start Date,End Date,Open,Close,Move (%),Breached\n';
+    d.periods.forEach(function(p) {
+      csv += [p.idx, p.start_date, p.end_date, p.open, p.close, p.move.toFixed(4), p.breached ? 'YES' : 'NO'].join(',') + '\n';
+    });
+    var blob = new Blob([csv], { type: 'text/csv' });
+    var a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = d.ticker + '_' + d.option_type + '_' + d.strike + '_' + d.expiry + '.csv';
+    a.click();
+  });
+}
+
+function metCard(label, value, sub, color) {
+  return '<div class="metric-card ' + color + ' animate">' +
+    '<div class="metric-label">' + label + '</div>' +
+    '<div class="metric-value">' + value + '</div>' +
+    '<div class="metric-sub">' + sub + '</div>' +
+  '</div>';
+}
+</script>
+</body>
+</html>

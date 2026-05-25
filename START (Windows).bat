@@ -1,0 +1,6 @@
+@echo off
+echo Installing dependencies (first run only)...
+pip install yfinance pandas --quiet
+echo Starting Options Backtester...
+python server.py
+pause
